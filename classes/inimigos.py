@@ -1,11 +1,12 @@
 import pygame
-from classes.game_object import game_object
-from constants import LARGURA, CHAO_Y
+from classes.game_object import GameObject
+from constants import LARGURA, CHAO_Y, IMAGES_PATH
+import os
 
-class Inimigo(game_object):
+class Inimigo(GameObject):
     def __init__(self, velocidade_extra=0):
-        imagem = pygame.image.load("assets/inimigos1_1.png").convert_alpha()
-        imagem = pygame.transform.scale(imagem, (96, 96))
+        imagem = pygame.image.load(os.path.join(IMAGES_PATH, "inimigos1_1.png")).convert_alpha() #os.path.join une as strings IMAGES_PATH(pasta das imagens)+
+        imagem = pygame.transform.scale(imagem, (96, 96))                                        #e o nome do arquivo png
         super().__init__(imagem)
 
         # nasce fora da tela, à direita, em cima do chão

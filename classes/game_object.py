@@ -1,4 +1,4 @@
-class game_object:
+class GameObject:
     def __init__(self, imagem):
         self.imagem = imagem
         self.rect = imagem.get_rect()
