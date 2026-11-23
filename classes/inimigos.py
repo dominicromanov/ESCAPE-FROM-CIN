@@ -4,7 +4,7 @@ from constants import LARGURA, CHAO_Y
 
 class Inimigo(game_object):
     def __init__(self, velocidade_extra=0):
-        imagem = pygame.image.load("inimigos1_1.png").convert_alpha()
+        imagem = pygame.image.load("assets/inimigos1_1.png").convert_alpha()
         imagem = pygame.transform.scale(imagem, (96, 96))
         super().__init__(imagem)
 

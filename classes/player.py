@@ -88,4 +88,3 @@ while executando:
 
 # 6. Encerra o Pygame
 pygame.quit()
-a
