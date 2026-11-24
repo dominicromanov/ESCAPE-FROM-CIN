@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 import pygame
 
+from classes.game_object import GameObject
 from classes.player import Player
+from constants import LARGURA, ALTURA, FPS, CHAO_Y
 
 
 class TeclasMock:
@@ -255,51 +257,73 @@ class TestPlayerAudit(unittest.TestCase):
             self.assertFalse(player.registrar_acerto_ataque(inimigo_b))
 
     def test_10_dano_negativo_e_vida_maxima(self):
-        """receber_dano() não pode aceitar valores negativos/inválidos nem exceder vida_maxima ou cair abaixo de 0."""
-        player = Player(x=200, y=460)
-        player.receber_dano(-50)
-        self.assertEqual(player.vida, player.vida_maxima)
+        """receber_dano() não pode aceitar valores negativos/inválidos nem exceder 3 vidas ou cair abaixo de 0."""
+        tempo_simulado = 1000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            player = Player(x=200, y=460)
+            self.assertEqual(player.vida_maxima, 3)
+            self.assertEqual(player.vida, 3)
 
-        player.receber_dano(0)
-        self.assertEqual(player.vida, player.vida_maxima)
+            player.receber_dano(-50)
+            self.assertEqual(player.vida, 3)
 
-        player.receber_dano("invalido")
-        self.assertEqual(player.vida, player.vida_maxima)
+            player.receber_dano(0)
+            self.assertEqual(player.vida, 3)
 
-        player.receber_dano(True)
-        self.assertEqual(player.vida, player.vida_maxima)
+            player.receber_dano("invalido")
+            self.assertEqual(player.vida, 3)
 
-        player.receber_dano(30)
-        self.assertEqual(player.vida, 70)
+            player.receber_dano(True)
+            self.assertEqual(player.vida, 3)
 
-        player.receber_dano(-10)
-        self.assertEqual(player.vida, 70)
+            # Cada dano válido remove exatamente 1 vida
+            morreu = player.receber_dano(1)
+            self.assertFalse(morreu)
+            self.assertEqual(player.vida, 2)
 
-        morreu = player.receber_dano(999)
-        self.assertTrue(morreu)
-        self.assertEqual(player.vida, 0)
-        self.assertFalse(player.esta_vivo)
+            player.receber_dano(-10)
+            self.assertEqual(player.vida, 2)
+
+            # Aguarda expirar i-frames para receber o 2º e 3º danos
+            tempo_simulado += player.duracao_invulnerabilidade_ms
+            self.assertFalse(player.receber_dano(999))
+            self.assertEqual(player.vida, 1)
+
+            tempo_simulado += player.duracao_invulnerabilidade_ms
+            morreu = player.receber_dano(1)
+            self.assertTrue(morreu)
+            self.assertEqual(player.vida, 0)
+            self.assertFalse(player.esta_vivo)
+
+            # Dano extra após morrer não deixa vida negativa
+            tempo_simulado += player.duracao_invulnerabilidade_ms
+            player.receber_dano(1)
+            self.assertEqual(player.vida, 0)
 
     def test_11_bloqueio_de_acoes_com_vida_zero(self):
         """Com vida == 0, o personagem não pode andar, pular nem atacar."""
-        player = Player(x=200, y=460)
-        player.atualizar(TeclasMock(), self.dt, plataformas=[self.chao])
-        player.receber_dano(player.vida_maxima)
-        self.assertFalse(player.esta_vivo)
+        tempo_simulado = 1000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            player = Player(x=200, y=460)
+            player.atualizar(TeclasMock(), self.dt, plataformas=[self.chao])
+            for _ in range(3):
+                player.receber_dano(1)
+                tempo_simulado += player.duracao_invulnerabilidade_ms
+            self.assertFalse(player.esta_vivo)
 
-        x_inicial = player.x
-        player.atualizar(
-            TeclasMock(pygame.K_d, pygame.K_w, pygame.K_SPACE, pygame.K_j, pygame.K_f),
-            self.dt,
-            plataformas=[self.chao],
-        )
+            x_inicial = player.x
+            player.atualizar(
+                TeclasMock(pygame.K_d, pygame.K_w, pygame.K_SPACE, pygame.K_j, pygame.K_f),
+                self.dt,
+                plataformas=[self.chao],
+            )
 
-        self.assertEqual(player.x, x_inicial)
-        self.assertEqual(player.estado_movimento, "PARADO")
-        self.assertTrue(player.no_chao)
-        self.assertEqual(player.velocidade_vertical, 0.0)
-        self.assertFalse(player.atacando)
-        self.assertFalse(player.obter_dados_ataque()["ativo"])
+            self.assertEqual(player.x, x_inicial)
+            self.assertEqual(player.estado_movimento, "PARADO")
+            self.assertTrue(player.no_chao)
+            self.assertEqual(player.velocidade_vertical, 0.0)
+            self.assertFalse(player.atacando)
+            self.assertFalse(player.obter_dados_ataque()["ativo"])
 
     def test_12_comportamento_com_dt_elevado(self):
         """dt elevado (ex: 1.0s de travamento de janela) deve ser limitado a 0.05s."""
@@ -324,8 +348,9 @@ class TestPlayerAudit(unittest.TestCase):
             self.assertEqual(len(player.animacoes["RUN"]), 7)
             self.assertEqual(len(player.animacoes["JUMP"]), 4)
             self.assertEqual(len(player.animacoes["CROUCH"]), 1)
+            self.assertEqual(len(player.animacoes["ATTACK"]), 8)
             self.assertEqual(len(player.animacoes["DEAD"]), 5)
-            self.assertEqual(total_sprites, 20)
+            self.assertEqual(total_sprites, 28)
         finally:
             os.chdir(cwd_original)
 
@@ -337,13 +362,18 @@ class TestPlayerAudit(unittest.TestCase):
             player.atualizar(TeclasMock(), self.dt, plataformas=[self.chao])
             self.assertEqual(player.estado_animacao, "STOP")
 
-            # Zera a vida do jogador
-            morreu = player.receber_dano(100)
+            # Zera as 3 vidas do jogador respeitando i-frames
+            self.assertFalse(player.receber_dano(1))
+            tempo_simulado += player.duracao_invulnerabilidade_ms
+            self.assertFalse(player.receber_dano(1))
+            tempo_simulado += player.duracao_invulnerabilidade_ms
+            morreu = player.receber_dano(1)
             self.assertTrue(morreu)
             self.assertFalse(player.esta_vivo)
 
             # Primeira atualização após morrer: entra em DEAD no frame 0
-            tempo_simulado = 1016
+            tempo_simulado += 16
+            tempo_inicio_morte = tempo_simulado
             player.atualizar(
                 TeclasMock(pygame.K_d, pygame.K_w, pygame.K_j),
                 self.dt,
@@ -355,7 +385,7 @@ class TestPlayerAudit(unittest.TestCase):
             frames_vistos = [player.indice_frame]
             # Avança o tempo em passos de 120ms por 10 ciclos (muito além dos 5 frames)
             for passo in range(1, 11):
-                tempo_simulado = 1016 + passo * 120
+                tempo_simulado = tempo_inicio_morte + passo * 120
                 player.atualizar(
                     TeclasMock(pygame.K_a, pygame.K_SPACE, pygame.K_f),
                     self.dt,
@@ -439,10 +469,14 @@ class TestPlayerAudit(unittest.TestCase):
             player.atualizar(TeclasMock(), self.dt, plataformas=[self.chao])
             if player.no_chao:
                 break
-        player.receber_dano(player.vida_maxima)
-        player.atualizar(TeclasMock(pygame.K_s), self.dt, plataformas=[self.chao])
-        self.assertFalse(player.agachado)
-        self.assertEqual(player.estado_animacao, "DEAD")
+        tempo_simulado = 5000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            for _ in range(3):
+                player.receber_dano(1)
+                tempo_simulado += player.duracao_invulnerabilidade_ms
+            player.atualizar(TeclasMock(pygame.K_s), self.dt, plataformas=[self.chao])
+            self.assertFalse(player.agachado)
+            self.assertEqual(player.estado_animacao, "DEAD")
 
     def test_18_nao_atravessar_teto_ao_levantar(self):
         """Se houver um obstáculo acima impedindo a altura normal, o player permanece agachado."""
@@ -473,6 +507,162 @@ class TestPlayerAudit(unittest.TestCase):
         self.assertEqual(player.estado_animacao, "STOP")
         self.assertEqual(player.rect.height, player.altura_normal)
         self.assertEqual(player.rect.bottom, 600)
+
+    def test_19_heranca_game_object_imagem_e_hitbox(self):
+        """Player deve herdar de GameObject, preservar hitbox 60x140/60x96 e sincronizar self.imagem."""
+        player = Player(x=200, y=460)
+        self.assertIsInstance(player, GameObject)
+        self.assertEqual(player.rect.size, (60, 140))
+        self.assertIs(player.imagem, player.animacoes["STOP"][0])
+
+        # Ao agachar, hitbox muda para 60x96 e self.imagem acompanha CROUCH
+        player.atualizar(TeclasMock(), self.dt, plataformas=[self.chao])
+        player.atualizar(TeclasMock(pygame.K_s), self.dt, plataformas=[self.chao])
+        self.assertEqual(player.rect.size, (60, 96))
+        self.assertIs(player.imagem, player.animacoes["CROUCH"][0])
+
+        # Ao andar para a esquerda, self.imagem reflete o sprite espelhado de RUN
+        player.atualizar(TeclasMock(pygame.K_a), self.dt, plataformas=[self.chao])
+        self.assertEqual(player.rect.size, (60, 140))
+        self.assertEqual(player.estado_animacao, "RUN")
+        self.assertEqual(player.imagem.get_size(), player.animacoes["RUN"][0].get_size())
+        self.assertIsNot(player.imagem, player.animacoes["RUN"][0])
+
+    def test_20_chao_padrao_chao_y_sem_plataformas(self):
+        """Sem plataformas nem chao_provisorio, Player deve reconhecer CHAO_Y como chão padrão."""
+        player = Player(x=200, y=300)
+        for _ in range(120):
+            player.atualizar(TeclasMock(), self.dt)
+            if player.no_chao:
+                break
+
+        self.assertTrue(player.no_chao)
+        self.assertEqual(player.rect.bottom, CHAO_Y)
+        self.assertEqual(player.estado_animacao, "STOP")
+
+        # Também funciona chamando atualizar() sem argumentos opcionais (teclas e dt padrão)
+        player_padrao = Player(x=150)
+        self.assertEqual(player_padrao.rect.bottom, CHAO_Y)
+        player_padrao.atualizar()
+        self.assertTrue(player_padrao.no_chao)
+        self.assertEqual(player_padrao.rect.bottom, CHAO_Y)
+
+    def test_21_sistema_tres_vidas_e_invulnerabilidade_temporaria(self):
+        """Após sofrer dano, i-frames impedem perda de múltiplas vidas em frames consecutivos."""
+        tempo_simulado = 1000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            player = Player(x=200)
+            self.assertEqual(player.vida, 3)
+            self.assertFalse(player.invulneravel)
+
+            # 1º contato com inimigo: perde 1 vida e entra em invulnerabilidade
+            morreu = player.receber_dano(1)
+            self.assertFalse(morreu)
+            self.assertEqual(player.vida, 2)
+            self.assertTrue(player.invulneravel)
+
+            # 30 frames consecutivos de colisão (~480ms < 1000ms): não perde mais vidas
+            for frame in range(1, 31):
+                tempo_simulado = 1000 + frame * 16
+                self.assertTrue(player.invulneravel)
+                self.assertFalse(player.receber_dano(1))
+            self.assertEqual(player.vida, 2)
+
+            # Após expirar a invulnerabilidade (t=2000ms): novo contato remove a 2ª vida
+            tempo_simulado = 2000
+            self.assertFalse(player.invulneravel)
+            self.assertFalse(player.receber_dano(1))
+            self.assertEqual(player.vida, 1)
+            self.assertTrue(player.invulneravel)
+
+            # Novo contato após nova janela (t=3000ms): remove a 3ª vida e morre
+            tempo_simulado = 3000
+            self.assertTrue(player.receber_dano(1))
+            self.assertEqual(player.vida, 0)
+            self.assertFalse(player.esta_vivo)
+            self.assertFalse(player.invulneravel)
+
+    def test_22_animacao_ataque_progressao_e_retorno(self):
+        """Ataque deve carregar 8 frames, progredir 0..7 em ordem e retornar ao estado atual (STOP/RUN)."""
+        tempo_simulado = 1000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            player = Player(x=200)
+            self.assertEqual(len(player.animacoes["ATTACK"]), 8)
+            player.atualizar(TeclasMock(), self.dt)
+            self.assertEqual(player.estado_animacao, "STOP")
+
+            # Inicia ataque com J em t=1000
+            player.atualizar(TeclasMock(pygame.K_j), self.dt)
+            self.assertTrue(player.animando_ataque)
+            self.assertEqual(player.estado_animacao, "ATTACK")
+            self.assertEqual(player.indice_frame, 0)
+
+            frames_vistos = [player.indice_frame]
+            # Avança 7 intervalos de 45 ms -> percorre frames 1..7
+            for passo in range(1, 8):
+                tempo_simulado = 1000 + passo * player.intervalo_animacao_ataque_ms
+                player.atualizar(TeclasMock(), self.dt)
+                self.assertEqual(player.estado_animacao, "ATTACK")
+                frames_vistos.append(player.indice_frame)
+
+            self.assertEqual(frames_vistos, [0, 1, 2, 3, 4, 5, 6, 7])
+
+            # Próximo intervalo (t = 1000 + 8 * 45 = 1360 ms): termina animação e volta para STOP
+            tempo_simulado = 1000 + 8 * player.intervalo_animacao_ataque_ms
+            player.atualizar(TeclasMock(), self.dt)
+            self.assertFalse(player.animando_ataque)
+            self.assertEqual(player.estado_animacao, "STOP")
+
+            # Novo ataque após cooldown (t = 1450 ms) enquanto corre -> ao terminar volta para RUN
+            tempo_simulado = 1450
+            player.atualizar(TeclasMock(pygame.K_d, pygame.K_f), self.dt)
+            self.assertEqual(player.estado_animacao, "ATTACK")
+            for passo in range(1, 9):
+                tempo_simulado = 1450 + passo * player.intervalo_animacao_ataque_ms
+                player.atualizar(TeclasMock(pygame.K_d), self.dt)
+            self.assertFalse(player.animando_ataque)
+            self.assertEqual(player.estado_animacao, "RUN")
+
+    def test_23_animacao_ataque_orientacao_hitbox_e_cooldown(self):
+        """Ataque deve espelhar self.imagem para a esquerda, manter hitbox de 180ms e respeitar cooldown de 400ms."""
+        tempo_simulado = 2000
+        with patch("pygame.time.get_ticks", side_effect=lambda: tempo_simulado):
+            player = Player(x=200)
+            player.atualizar(TeclasMock(), self.dt)
+
+            # Ataque olhando para a direita
+            player.atualizar(TeclasMock(pygame.K_j), self.dt)
+            self.assertFalse(player.olhando_para_esquerda)
+            self.assertIs(player.imagem, player.animacoes["ATTACK"][0])
+            dados_dir = player.obter_dados_ataque()
+            self.assertTrue(dados_dir["ativo"])
+            self.assertEqual(dados_dir["hitbox"].left, player.rect.right)
+
+            # Em t=2200ms (200ms > 180ms): hitbox já encerrou, mas animação visual ATTACK ainda continua!
+            tempo_simulado = 2200
+            player.atualizar(TeclasMock(), self.dt)
+            self.assertFalse(player.obter_dados_ataque()["ativo"])
+            self.assertTrue(player.animando_ataque)
+            self.assertEqual(player.estado_animacao, "ATTACK")
+
+            # Em t=2350ms (350ms < 400ms cooldown): pressionar J não inicia novo ataque
+            id_anterior = player.id_ataque
+            tempo_simulado = 2350
+            player.atualizar(TeclasMock(pygame.K_j), self.dt)
+            self.assertEqual(player.id_ataque, id_anterior)
+
+            # Em t=2500ms (>= 400ms cooldown): vira para a esquerda e ataca
+            tempo_simulado = 2500
+            player.atualizar(TeclasMock(pygame.K_a, pygame.K_f), self.dt)
+            self.assertTrue(player.olhando_para_esquerda)
+            self.assertEqual(player.estado_animacao, "ATTACK")
+            self.assertEqual(player.id_ataque, id_anterior + 1)
+            # self.imagem deve ser versão espelhada (nova Surface com mesmo tamanho)
+            self.assertIsNot(player.imagem, player.animacoes["ATTACK"][0])
+            self.assertEqual(player.imagem.get_size(), player.animacoes["ATTACK"][0].get_size())
+            dados_esq = player.obter_dados_ataque()
+            self.assertTrue(dados_esq["ativo"])
+            self.assertEqual(dados_esq["hitbox"].right, player.rect.left)
 
 
 if __name__ == "__main__":

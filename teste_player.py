@@ -48,11 +48,13 @@ while rodando:
             if evento.key == pygame.K_h:
                 modo_depuracao = not modo_depuracao
             elif evento.key == pygame.K_k:
-                # Simula dano para testar vida e morte gradual
-                player.receber_dano(25)
+                # Simula 1 dano (respeitando i-frames) para testar as 3 vidas
+                player.receber_dano(1)
             elif evento.key == pygame.K_m:
-                # Zera a vida imediatamente para testar a animação DEAD
-                player.receber_dano(player.vida_maxima)
+                # Zera as vidas imediatamente para testar a animação DEAD
+                player.vida = 1
+                player.ultimo_dano_tempo = -player.duracao_invulnerabilidade_ms
+                player.receber_dano(1)
             elif evento.key == pygame.K_r:
                 # Reinicia o personagem
                 player = Player(x=200, y=200)
