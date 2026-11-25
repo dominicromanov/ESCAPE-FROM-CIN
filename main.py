@@ -1,6 +1,7 @@
 import pygame
 from constants import LARGURA, ALTURA, FPS
 from classes.inimigos import Inimigo
+from sys import exit
 
 pygame.init()
 tela = pygame.display.set_mode((LARGURA, ALTURA))
@@ -36,3 +37,4 @@ while rodando:
     relogio.tick(FPS)
 
 pygame.quit()
+exit()
