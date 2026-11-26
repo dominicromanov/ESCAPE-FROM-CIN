@@ -1,10 +1,12 @@
 import pygame
 from constants import LARGURA, ALTURA, FPS
 from classes.inimigos import Inimigo
+from sys import exit
 
 pygame.init()
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 relogio = pygame.time.Clock()
+pygame.display.set_caption('Escape from CIn')   #nome da janela
 
 velocidade_mundo = 3
 inimigo = Inimigo()          # o primeiro nasce já no começo
@@ -36,3 +38,4 @@ while rodando:
     relogio.tick(FPS)
 
 pygame.quit()
+exit()
