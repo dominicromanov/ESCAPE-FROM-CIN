@@ -43,6 +43,7 @@ class Main:
             colisor = Colision(self.player, inimigo)
             colisor.verificar_ataque_player()
             colisor.verificar_ataque_inimigo()
+            colisor.verificar_colisao_corpo()
 
     def desenhar(self):
         self.cenario1.desenha_cenario(self.tela)

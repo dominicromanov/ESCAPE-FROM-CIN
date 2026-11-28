@@ -31,3 +31,11 @@ class Colision:
             if self.jogador.rect.colliderect(dados_ataque["hitbox"]):
                 self.jogador.receber_dano(dados_ataque["dano"])
                 self.inimigo.registrar_acerto()
+
+    #define o que fazer caso haja colisão nesse caso diminui a vida do player
+    def verificar_colisao_corpo(self):
+        if not self.inimigo.esta_vivo:
+            return
+
+        if self.detectar_colisao():
+            self.jogador.receber_dano()
